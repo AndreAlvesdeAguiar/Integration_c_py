@@ -1,0 +1,143 @@
+
+
+#include <WiFi.h>
+#include <WebServer.h>
+#include <ArduinoJson.h>
+
+
+#include <DHT.h>
+
+#include <Wire.h>
+
+
+
+const char* SSID = "Okura&Aguiar";
+const char* PWD = "*welcome03";
+
+const uint8_t DHT_PIN = 25;
+const uint8_t DHTTYPE = DHT22; 
+
+
+DHT dht(DHT_PIN, DHTTYPE);
+
+double temperature, led;
+
+WebServer server(80);
+
+void setup_routing() {  
+
+  server.on("/led_all", HTTP_GET, [](){
+    if (server.hasArg("state")) {
+      String state = server.arg("state");
+      if (state == "on") {
+        digitalWrite(12, HIGH);
+        server.send(200, "text/plain", "LED ligado");
+      } else if (state == "off") {
+        digitalWrite(12, LOW);
+        server.send(200, "text/plain", "LED desligado");
+      } else {
+        server.send(400, "text/plain", "Valor de estado inválido");
+      }
+    } else {
+      server.send(400, "text/plain", "Parâmetro de estado ausente");
+    }
+  });  
+
+  server.on("/led1/on", HTTP_GET, [](){
+        digitalWrite(12, HIGH);
+        server.send(200, "text/plain", "LED ligado");
+  });  
+
+  server.on("/led1/off", HTTP_GET, [](){
+        digitalWrite(12, LOW);
+        server.send(200, "text/plain", "LED ligado");
+  });  
+
+  server.on("/temperature", HTTP_GET, []() {
+    DynamicJsonDocument jsonDocument(200);
+    double temperature = dht.readTemperature();
+    if (!isnan(temperature)) {
+      jsonDocument["type"] = "temperature";
+      jsonDocument["value"] = temperature;
+      jsonDocument["unit"] = "°C";
+    } else {
+      jsonDocument["error"] = "Failed to read temperature";
+    }
+    String response;
+    serializeJson(jsonDocument, response);
+    server.send(200, "application/json", response);
+  });
+
+  server.on("/humidity", HTTP_GET, []() {
+    DynamicJsonDocument jsonDocument(200);
+    jsonDocument["type"] = "humidity";
+    jsonDocument["value"] = dht.readHumidity();
+    jsonDocument["unit"] = "%";
+    String response;
+    serializeJson(jsonDocument, response);
+    server.send(200, "application/json", response);
+  });
+  
+  server.on("/data", HTTP_GET, []() {
+   DynamicJsonDocument jsonDocument(2000);
+    jsonDocument["temperature"]["type"] = "temperature";
+    jsonDocument["temperature"]["value"] = dht.readTemperature();
+    jsonDocument["temperature"]["unit"] = "°C";
+    jsonDocument["humidity"]["type"] = "humidity";
+    jsonDocument["humidity"]["value"] = dht.readHumidity();
+    jsonDocument["humidity"]["unit"] = "%";
+    String response;
+    serializeJson(jsonDocument, response);
+    server.send(200, "application/json", response);
+  });
+  server.begin();
+}
+
+void read_sensor_data(void * parameter) {
+  for (;;) {
+    double temperature = dht.readTemperature();
+    double umidade = dht.readHumidity();
+       
+    vTaskDelay(pdMS_TO_TICKS(60000));
+  }
+}
+
+void setup_task() {
+  xTaskCreate(
+    read_sensor_data,
+    "Read sensor data",
+    1000,
+    NULL,
+    1,
+    NULL
+  );
+}
+
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+
+  pinMode(12, OUTPUT);
+
+  WiFi.begin(SSID, PWD);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+  }
+
+  setup_task(); // Setup sensor data reading task
+  setup_routing(); // Setup web server routing
+
+  Serial.println(WiFi.localIP());  
+}
+
+void loop() {
+  server.handleClient();
+
+  int sensorValue1 = 0;
+  int sensorValue2 = 0;
+  int sensorValue3 = 0;
+  int sensorValue4 = 0;
+}
+
